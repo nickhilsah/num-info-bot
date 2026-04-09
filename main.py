@@ -8,13 +8,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 # --- WEB SERVER (For 24/7 Hosting) ---
 app = Flask('')
-
 @app.route('/')
-def home():
-    return "Bot is Online!"
+def home(): return "SYSTEM ONLINE ✅"
 
-def run():
-    app.run(host='0.0.0.0', port=8080)
+def run(): app.run(host='0.0.0.0', port=8080)
 
 def keep_alive():
     t = Thread(target=run)
@@ -22,73 +19,94 @@ def keep_alive():
     t.start()
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "8651545654:AAGGuLV625bR3NuQh_ixgfrKM3FtFCZPPPQ"
+BOT_TOKEN = "APNA_BOT_TOKEN_YAHAN_DALO"
 API_URL = "https://nv3.ek4nsh.in/api/lookup?term="
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# --- HELPER FUNCTION (Data Format Karne Ke Liye) ---
-def format_response(data):
-    """API data ko sundar format mein convert karta hai"""
-    if not data:
-        return "❌ Koi jaankari nahi mili."
+# --- THE ULTIMATE FORMATTER ---
+def format_ultra_clean(data, number):
+    if not data or not isinstance(data, dict):
+        return f"<b>📝 RESULT FOR:</b> <code>{number}</code>\n\n{data}"
+
+    # Sirf kaam ki jaankari dikhayenge
+    lines = []
+    lines.append("<b>╔══════════════════╗</b>")
+    lines.append("<b>       NUM INFO LOOKUP     </b>")
+    lines.append("<b>╚══════════════════╝</b>")
+    lines.append(f"<b>📍 TARGET :</b> <code>{number}</code>\n")
     
-    if isinstance(data, dict):
-        text = "👤 **User Information**\n"
-        text += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-        for key, value in data.items():
-            # Key ko sundar banane ke liye (e.g. 'full_name' -> 'Full Name')
-            clean_key = key.replace('_', ' ').title()
-            text += f"🔹 **{clean_key}**: `{value}`\n"
-        return text
+    # Mapping keys to better names
+    mapping = {
+        'name': '👤 NAME',
+        'operator': '📶 OPERATOR',
+        'circle': '🌍 CIRCLE',
+        'state': '📍 STATE',
+        'type': 'ℹ️ TYPE',
+        'carrier': '🏢 CARRIER',
+        'last_seen': '🕒 LAST SEEN'
+    }
+
+    found = False
+    for key, value in data.items():
+        # Check if we have a pretty name or use the raw key
+        label = mapping.get(key.lower(), f"🔹 {key.upper()}")
+        
+        # JUNK filter
+        if key.lower() not in ['status', 'success', 'v', 'api'] and value:
+            lines.append(f"<b>{label} :</b> <code>{value}</code>")
+            found = True
+            
+    if not found:
+        return "<b>❌ NO RECORD FOUND IN DATABASE</b>"
+
+    lines.append("\n<b>⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯</b>")
+    lines.append("<b>✅ DATA FETCHED SUCCESSFULLY</b>")
     
-    return f"📝 **Result:**\n`{str(data)}`"
+    return "\n".join(lines)
 
 # --- BOT HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 **Number Lookup Bot** mein swagat hai!\n\n"
-        "Sirf mobile number bhejiye aur main details nikaal dunga."
+    await update.message.reply_html(
+        "<b>👋 Number Lookup Bot Me Swagat Hai!</b>\n\n"
+        "Sirf 10-digit number bhejiye, details niche milengi."
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     number = update.message.text.strip()
     
     if not number.isdigit() or len(number) < 10:
-        await update.message.reply_text("⚠️ **Invalid Number!**\nKam se kam 10 digits ka number bhejein.")
+        await update.message.reply_html("<b>⚠️ INVALID:</b> 10-digit number bhejein.")
         return
 
-    wait_message = await update.message.reply_text("🔍 **Searching...**")
+    wait = await update.message.reply_html("<b>⚡ Searching Database...</b>")
 
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{API_URL}{number}", timeout=15) as response:
+            async with session.get(f"{API_URL}{number}", timeout=10) as response:
                 if response.status == 200:
                     try:
-                        # JSON format check karein
-                        json_data = await response.json()
-                        final_text = format_response(json_data)
+                        json_res = await response.json()
+                        final_msg = format_ultra_clean(json_res, number)
                     except:
-                        # Agar JSON nahi hai toh plain text
-                        raw_text = await response.text()
-                        final_text = f"📝 **Details Found:**\n\n`{raw_text}`"
+                        raw = await response.text()
+                        final_msg = f"<b>📝 DETAILS:</b>\n<code>{raw}</code>"
                     
-                    await wait_message.edit_text(final_text, parse_mode='Markdown')
+                    # HTML parse mode use ho raha hai yahan
+                    await wait.edit_text(final_msg, parse_mode='HTML')
                 else:
-                    await wait_message.edit_text(f"❌ **Error:** API ne response nahi diya (Status: {response.status})")
+                    await wait.edit_text(f"<b>❌ ERROR:</b> Server Code {response.status}")
     
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        await wait_message.edit_text("❌ **Connection Failed!**\nShayad API server offline hai.")
+    except Exception:
+        await wait.edit_text("<b>❌ TIMEOUT:</b> API connect nahi ho pa rahi.")
 
 def main():
     keep_alive()
-    application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    print("Bot is running...")
-    application.run_polling()
+    # Build with HTML support
+    app_bot = Application.builder().token(BOT_TOKEN).build()
+    app_bot.add_handler(CommandHandler("start", start))
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app_bot.run_polling()
 
 if __name__ == '__main__':
     main()
