@@ -1,113 +1,68 @@
-import os
-import logging
-import aiohttp
-from flask import Flask
-from threading import Thread
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import telebot
+import requests
 
-# --- WEB SERVER (For 24/7 Hosting) ---
-app = Flask('')
-@app.route('/')
-def home(): return "BOT STATUS: ONLINE 🚀"
+BOT_TOKEN = " YOUR_BOT_API_TOKEN "
+API_KEY = "5f829fb665db72e1fe34ea83ef3a2a9d"
 
-def run(): app.run(host='0.0.0.0', port=8080)
+API_URL = "http://apilayer.net/api/validate?acce...{key}&number=91{mob}&format=1"
 
-def keep_alive():
-    t = Thread(target=run)
-    t.daemon = True
-    t.start()
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# --- CONFIGURATION ---
-BOT_TOKEN = "APNA_BOT_TOKEN_YAHAN_DALO"
-API_URL = "https://nv3.ek4nsh.in/api/lookup?term="
-
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
-
-# --- THE FIX: DATA PARSER ---
-def format_with_emojis(data, number):
-    # Agar data list hai (jaise aapka hai), toh pehla element nikal lo
-    if isinstance(data, list) and len(data) > 0:
-        info = data[0]
-    elif isinstance(data, dict):
-        info = data
-    else:
-        return f"<b>🔎 RESULT FOR:</b> <code>{number}</code>\n\n{data}"
-
-    # Mapping keys to beautiful emojis and labels
-    mapping = {
-        'name': '👤 <b>NAME</b>',
-        'fatherName': '👨‍👦 <b>FATHER NAME</b>',
-        'address': '🏠 <b>ADDRESS</b>',
-        'circle': '🌍 <b>NETWORK CIRCLE</b>',
-        'aadhaarNumber': '🆔 <b>AADHAAR NO</b>',
-        'mobile': '📱 <b>MOBILE</b>',
-        'email': '📧 <b>EMAIL ID</b>'
-    }
-
-    lines = []
-    lines.append("<b>💎 ——— NUMBER DETAILS ——— 💎</b>\n")
-    lines.append(f"<b>📱 TARGET :</b> <code>{number}</code>")
-    lines.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n")
-    
-    found = False
-    for key, label in mapping.items():
-        # Dictionary mein check karo agar key maujood hai aur value khali nahi hai
-        value = info.get(key)
-        if value and str(value).strip():
-            lines.append(f"{label}\n┗━━» <code>{value}</code>\n")
-            found = True
-            
-    if not found:
-        return "<b>❌ DATA NOT FOUND IN DATABASE</b>"
-
-    lines.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯")
-    lines.append("<b>✅ SUCCESS : DATA FETCHED</b>")
-    
-    return "\n".join(lines)
-
-# --- BOT HANDLERS ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_html(
-        "<b>👋 Swagat Hai!</b>\n\n"
-        "Sirf mobile number bhejein aur details <b>Premium Design</b> mein paayein."
+@bot.message_handler(commands=["start"])
+def start_cmd(message):
+    welcome = (
+        "🔍 *Number Info Bot Activated!*\n\n"
+        "Mujhe koi bhi 10 digit Indian mobile number bhejo.\n"
+        "Main uski details fetch kar dunga.\n\n"
+        "Example: `9876543210`"
     )
+    bot.reply_to(message, welcome, parse_mode="Markdown")
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    number = update.message.text.strip()
-    
-    if not number.isdigit() or len(number) < 10:
-        await update.message.reply_html("<b>⚠️ ERROR:</b> Valid number bhejein.")
+
+@bot.message_handler(func=lambda m: True)
+def handle_num(message):
+    num = message.text.strip().replace(" ", "").replace("+91", "")
+
+    if not num.isdigit() or len(num) != 10:
+        bot.reply_to(message, "❌ *Invalid Number!*", parse_mode="Markdown")
         return
 
-    wait = await update.message.reply_html("<b>⚡ Searching Database...</b>")
+    loading = bot.reply_to(message, "🔄 *Fetching information...*", parse_mode="Markdown")
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{API_URL}{number}", timeout=10) as response:
-                if response.status == 200:
-                    try:
-                        # API se JSON data le rahe hain
-                        json_res = await response.json()
-                        final_msg = format_with_emojis(json_res, number)
-                    except Exception as e:
-                        # Agar JSON fail ho jaye
-                        raw = await response.text()
-                        final_msg = f"<b>📝 DETAILS:</b>\n<code>{raw}</code>"
-                    
-                    await wait.edit_text(final_msg, parse_mode='HTML')
-                else:
-                    await wait.edit_text(f"<b>❌ ERROR:</b> API Offline ({response.status})")
-    
-    except Exception as e:
-        await wait.edit_text(f"<b>❌ TIMEOUT:</b> API connect nahi hui.\n{str(e)}")
+        url = API_URL.format(mob=num, key=API_KEY)
+        r = requests.get(url, timeout=15)
 
-def main():
-    keep_alive()
-    app_bot = Application.builder().token(BOT_TOKEN).build()
-    app_bot.add_handler(CommandHandler("start", start))
-    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app_bot.run_polling()
+        if r.status_code != 200:
+            bot.edit_message_text("❌ Server error.", message.chat.id, loading.message_id)
+            return
 
-if __name__ == '__main__':
-    main()
+        data = r.json()
+
+        if data.get("valid") is True:
+            
+            operator = data.get("carrier", "N/A")
+            circle = data.get("location", "N/A")
+            address = data.get("location", "N/A")   # address = location
+
+            result = (
+                "✅ *Details Found!*\n\n"
+                f"📱 Number: `{num}`\n"
+                f"📡 Carrier: `{operator}`\n"
+                f"🌍 Circle: `{circle}`\n"
+                f"🏙 City: `{circle}`\n"
+                f"⚠️ Address: `{address}`\n"
+            )
+
+            bot.edit_message_text(result, message.chat.id, loading.message_id, parse_mode="Markdown")
+
+        else:
+            bot.edit_message_text("❌ No data found.", message.chat.id, loading.message_id)
+
+    except:
+        bot.edit_message_text("❌ Unexpected error.", message.chat.id, loading.message_id)
+
+
+print("🤖 Bot Running...")
+bot.infinity_polling(none_stop=True)
+
