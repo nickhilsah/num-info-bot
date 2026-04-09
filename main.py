@@ -24,21 +24,25 @@ API_URL = "https://nv3.ek4nsh.in/api/lookup?term="
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# --- THE ULTIMATE EMOJI FORMATTER ---
+# --- THE FIX: DATA PARSER ---
 def format_with_emojis(data, number):
-    if not data or not isinstance(data, dict):
+    # Agar data list hai (jaise aapka hai), toh pehla element nikal lo
+    if isinstance(data, list) and len(data) > 0:
+        info = data[0]
+    elif isinstance(data, dict):
+        info = data
+    else:
         return f"<b>🔎 RESULT FOR:</b> <code>{number}</code>\n\n{data}"
 
     # Mapping keys to beautiful emojis and labels
     mapping = {
         'name': '👤 <b>NAME</b>',
-        'operator': '📶 <b>OPERATOR</b>',
-        'circle': '🌍 <b>CIRCLE</b>',
-        'state': '📍 <b>STATE</b>',
-        'type': 'ℹ️ <b>SIM TYPE</b>',
-        'carrier': '🏢 <b>CARRIER</b>',
-        'last_seen': '🕒 <b>LAST SEEN</b>',
-        'location': '🗺 <b>LOCATION</b>'
+        'fatherName': '👨‍👦 <b>FATHER NAME</b>',
+        'address': '🏠 <b>ADDRESS</b>',
+        'circle': '🌍 <b>NETWORK CIRCLE</b>',
+        'aadhaarNumber': '🆔 <b>AADHAAR NO</b>',
+        'mobile': '📱 <b>MOBILE</b>',
+        'email': '📧 <b>EMAIL ID</b>'
     }
 
     lines = []
@@ -47,20 +51,13 @@ def format_with_emojis(data, number):
     lines.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n")
     
     found = False
-    for key, value in data.items():
-        k_lower = key.lower()
-        if k_lower in mapping and value:
-            label = mapping[k_lower]
+    for key, label in mapping.items():
+        # Dictionary mein check karo agar key maujood hai aur value khali nahi hai
+        value = info.get(key)
+        if value and str(value).strip():
             lines.append(f"{label}\n┗━━» <code>{value}</code>\n")
             found = True
             
-    # Agar kuch naya data aaye jo mapping mein nahi hai
-    if not found:
-        for key, value in data.items():
-            if key.lower() not in ['status', 'success', 'v', 'api'] and value:
-                lines.append(f"<b>🔹 {key.upper()}</b>\n┗━━» <code>{value}</code>\n")
-                found = True
-
     if not found:
         return "<b>❌ DATA NOT FOUND IN DATABASE</b>"
 
@@ -73,7 +70,7 @@ def format_with_emojis(data, number):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(
         "<b>👋 Swagat Hai!</b>\n\n"
-        "Sirf mobile number bhejein aur details <b>Emojis</b> ke saath paayein."
+        "Sirf mobile number bhejein aur details <b>Premium Design</b> mein paayein."
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -90,9 +87,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             async with session.get(f"{API_URL}{number}", timeout=10) as response:
                 if response.status == 200:
                     try:
+                        # API se JSON data le rahe hain
                         json_res = await response.json()
                         final_msg = format_with_emojis(json_res, number)
-                    except:
+                    except Exception as e:
+                        # Agar JSON fail ho jaye
                         raw = await response.text()
                         final_msg = f"<b>📝 DETAILS:</b>\n<code>{raw}</code>"
                     
@@ -100,8 +99,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     await wait.edit_text(f"<b>❌ ERROR:</b> API Offline ({response.status})")
     
-    except Exception:
-        await wait.edit_text("<b>❌ TIMEOUT:</b> API connect nahi hui.")
+    except Exception as e:
+        await wait.edit_text(f"<b>❌ TIMEOUT:</b> API connect nahi hui.\n{str(e)}")
 
 def main():
     keep_alive()
