@@ -3,7 +3,7 @@ import requests
 
 BOT_TOKEN = "8651545654:AAGGuLV625bR3NuQh_ixgfrKM3FtFCZPPPQ"
 
-API_URL = ""https://nv3.ek4nsh.in/api/lookup?term=""
+API_URL = "https://nv3.ek4nsh.in/api/lookup?term="
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
