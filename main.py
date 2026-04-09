@@ -1,10 +1,9 @@
 import telebot
 import requests
 
-BOT_TOKEN = " YOUR_BOT_API_TOKEN "
-API_KEY = "5f829fb665db72e1fe34ea83ef3a2a9d"
+BOT_TOKEN = "8651545654:AAGGuLV625bR3NuQh_ixgfrKM3FtFCZPPPQ"
 
-API_URL = "http://apilayer.net/api/validate?acce...{key}&number=91{mob}&format=1"
+API_URL = "https://nv3.ek4nsh.in/api/lookup?term=9876543210"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
