@@ -3,7 +3,7 @@ import requests
 import logging
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "YOUR_BOT_API_TOKEN"
+BOT_TOKEN = "8651545654:AAGGuLV625bR3NuQh_ixgfrKM3FtFCZPPPQ"
 API_BASE_URL = "https://nv3.ek4nsh.in/api/lookup?term="
 
 bot = telebot.TeleBot(BOT_TOKEN)
