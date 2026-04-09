@@ -19,7 +19,7 @@ def keep_alive():
     t.start()
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "APNA_BOT_TOKEN_YAHAN_DALO"
+BOT_TOKEN = "8651545654:AAGGuLV625bR3NuQh_ixgfrKM3FtFCZPPPQ"
 API_URL = "https://nv3.ek4nsh.in/api/lookup?term="
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
