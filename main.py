@@ -8,13 +8,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 # --- WEB SERVER (For 24/7 Hosting) ---
 app = Flask('')
-
 @app.route('/')
-def home():
-    return "Bot is Online!"
+def home(): return "SYSTEM ONLINE ✅"
 
-def run():
-    app.run(host='0.0.0.0', port=8080)
+def run(): app.run(host='0.0.0.0', port=8080)
 
 def keep_alive():
     t = Thread(target=run)
@@ -25,70 +22,94 @@ def keep_alive():
 BOT_TOKEN = "8651545654:AAGGuLV625bR3NuQh_ixgfrKM3FtFCZPPPQ"
 API_URL = "https://nv3.ek4nsh.in/api/lookup?term="
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# --- HELPER FUNCTION (Data Format Karne Ke Liye) ---
-def format_response(data):
-    """API data ko sundar format mein convert karta hai"""
-    if not data:
-        return "❌ Koi jaankari nahi mili."
+# --- THE CLEAN PREMIUM FORMATTER ---
+def format_premium_response(data, number):
+    # Agar data list hai toh pehla item nikalein
+    if isinstance(data, list) and len(data) > 0:
+        info = data[0]
+    elif isinstance(data, dict):
+        # Agar dict hai aur uske andar 'data' key hai (kuch APIs aisa karti hain)
+        if 'data' in data and isinstance(data['data'], list):
+            info = data['data'][0]
+        else:
+            info = data
+    else:
+        return "<b>❌ KOI RECORD NAHI MILA</b>"
+
+    # Mapping keys to labels (Aapki API ke specific keys)
+    mapping = {
+        'name': '👤 <b>FULL NAME</b>',
+        'fatherName': '👨‍👦 <b>FATHER NAME</b>',
+        'circle': '🌍 <b>NETWORK CIRCLE</b>',
+        'address': '🏠 <b>ADDRESS</b>',
+        'aadhaarNumber': '🆔 <b>AADHAAR NUMBER</b>'
+    }
+
+    lines = []
+    lines.append("<b>💎 ——— NUMBER DETAILS ——— 💎</b>\n")
+    lines.append(f"<b>📱 TARGET :</b> <code>{number}</code>")
+    lines.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n")
     
-    if isinstance(data, dict):
-        text = "👤 **User Information**\n"
-        text += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-        for key, value in data.items():
-            # Key ko sundar banane ke liye (e.g. 'full_name' -> <b>'Full Name'</b>)
-            clean_key = key.replace('_', ' ').title()
-            text += f"🔹 **{clean_key}**: `{value}`\n"
-        return text
+    found = False
+    for key, label in mapping.items():
+        value = info.get(key)
+        if value and str(value).strip() and str(value).lower() != "n/a":
+            val_str = str(value).upper()
+            # Label ke niche bold value
+            lines.append(f"{label}\n┗━━» <b>{val_str}</b>\n")
+            found = True
+            
+    if not found:
+        return "<b>❌ NO RECORD FOUND IN DATABASE</b>"
+
+    lines.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯")
+    lines.append("<b>✅ SUCCESS : DATA FETCHED</b>")
     
-    return f"📝 **Result:**\n`{str(data)}`"
+    return "\n".join(lines)
 
 # --- BOT HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 **Number Lookup Bot** mein swagat hai!\n\n"
-        "Sirf mobile number bhejiye aur main details nikaal dunga."
+    await update.message.reply_html(
+        "<b>👋 Swagat Hai!</b>\n\n"
+        "Sirf 10-digit number bhejiye, details niche milengi."
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    number = update.message.text.strip()
+    # Number clean up
+    number = update.message.text.strip().replace(" ", "").replace("+91", "")
     
     if not number.isdigit() or len(number) < 10:
-        await update.message.reply_text("⚠️ **Invalid Number!**\nKam se kam 10 digits ka number bhejein.")
+        await update.message.reply_html("<b>⚠️ INVALID:</b> 10-digit number bhejein.")
         return
 
-    wait_message = await update.message.reply_text("🔍 **Searching...**")
+    wait = await update.message.reply_html("<b>⚡ Searching Database...</b>")
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{API_URL}{number}", timeout=15) as response:
                 if response.status == 200:
-                    try:
-                        # JSON format check karein
-                        json_data = await response.json()
-                        final_text = format_response(json_data)
-                    except:
-                        # Agar JSON nahi hai toh plain text
-                        raw_text = await response.text()
-                        final_text = f"📝 **Details Found:**\n\n`{raw_text}`"
+                    json_res = await response.json()
+                    # Formatting logic call
+                    final_msg = format_premium_response(json_res, number)
                     
-                    await wait_message.edit_text(final_text, parse_mode='Markdown')
+                    await wait.edit_text(final_msg, parse_mode='HTML')
                 else:
-                    await wait_message.edit_text(f"❌ **Error:** API ne response nahi diya (Status: {response.status})")
+                    await wait.edit_text(f"<b>❌ ERROR:</b> Server Code {response.status}")
     
     except Exception as e:
         logging.error(f"Error: {e}")
-        await wait_message.edit_text("❌ **Connection Failed!**\nShayad API server offline hai.")
+        await wait.edit_text("<b>❌ TIMEOUT:</b> API connect nahi ho rahi.")
 
 def main():
     keep_alive()
-    application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app_bot = Application.builder().token(BOT_TOKEN).build()
+    app_bot.add_handler(CommandHandler("start", start))
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("Bot is running...")
-    application.run_polling()
+    print("Bot is LIVE with Clear Output!")
+    app_bot.run_polling()
 
 if __name__ == '__main__':
     main()
