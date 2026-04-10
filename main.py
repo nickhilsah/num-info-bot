@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 # --- WEB SERVER ---
 app = Flask('')
 @app.route('/')
-def home(): return "BOT READY ✅"
+def home(): return "UNIFIED BOT ONLINE ✅"
 
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive():
@@ -23,56 +23,45 @@ API_URL = "https://nv3.ek4nsh.in/api/lookup?term="
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# --- UNIFIED FORMATTER ---
+# --- UNIFIED MASTER FORMATTER ---
 def format_unified_response(data_list, search_num):
     if not data_list:
         return "<b>❌ NO RECORD FOUND</b>"
 
-    # Data Containers (Sets use kar rahe hain duplicates hatane ke liye)
-    all_numbers = set()
+    # Sets use kar rahe hain taaki duplicate data automatically hat jaye
+    all_numbers = {search_num} # Search number pehle se add hai
     names = set()
     fathers = set()
     addresses = set()
     aadhaars = set()
-    networks = set()
-    
-    # Search kiya gaya number hamesha list mein rahega
-    all_numbers.add(search_num)
+    circles = set()
 
+    # Saare 4-5 jitne bhi records hain, unka loop
     for info in data_list:
-        def clean(key):
-            val = str(info.get(key, "")).strip()
-            return val if val.lower() not in ["n/a", "null", "undefined", "none", ""] else None
+        def get_clean(key):
+            v = str(info.get(key, "")).strip()
+            return v if v.lower() not in ["n/a", "null", "undefined", "none", ""] else None
 
-        # Info extraction
-        n = clean('name')
-        if n: names.add(n.upper())
-        
-        f = clean('fatherName')
-        if f: fathers.add(f.upper())
+        # Data collect karna
+        if get_clean('name'): names.add(get_clean('name').upper())
+        if get_clean('fatherName'): fathers.add(get_clean('fatherName').upper())
+        if get_clean('address'): addresses.add(get_clean('address').upper())
+        if get_clean('aadhaarNumber'): aadhaars.add(get_clean('aadhaarNumber'))
+        if get_clean('circle'): circles.add(get_clean('circle').upper())
 
-        a = clean('address')
-        if a: addresses.add(a.upper())
-
-        aadhaar = clean('aadhaarNumber')
-        if aadhaar: aadhaars.add(aadhaar)
-
-        circle = clean('circle')
-        if circle: networks.add(circle.upper())
-
-        # Saare mobile aur alternate numbers ko ek hi set mein daalna
+        # Alternative aur Mobile numbers ko extract karke ek saath lana
         for key in ['mobile', 'alternateNumber']:
-            raw_val = clean(key)
-            if raw_val:
-                # Comma ya space se numbers ko alag karke saaf karna
-                for part in raw_val.replace(",", " ").split():
-                    digit_only = "".join(filter(str.isdigit, part))
-                    if len(digit_only) >= 10:
-                        all_numbers.add(digit_only)
+            val = get_clean(key)
+            if val:
+                # Agar ek hi line mein multiple numbers hon comma/space ke saath
+                for part in val.replace(",", " ").split():
+                    num = "".join(filter(str.isdigit, part))
+                    if len(num) >= 10:
+                        all_numbers.add(num)
 
-    # Response Messaging
+    # Final Output taiyar karna
     lines = []
-    lines.append("<b>💎 MASTER DATA RECORD</b>")
+    lines.append("<b>💎 UNIFIED MASTER RECORD</b>")
     lines.append(f"<b>🎯 TARGET:</b> <code>{search_num}</code>")
     lines.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯")
     
@@ -85,16 +74,20 @@ def format_unified_response(data_list, search_num):
     if aadhaars:
         lines.append(f"🆔 <b>AADHAAR:</b> <code>{', '.join(aadhaars)}</code>")
 
-    if networks:
-        lines.append(f"🌍 <b>CIRCLE:</b> <code>{', '.join(networks)}</code>")
+    if circles:
+        lines.append(f"🌍 <b>CIRCLE:</b> <code>{', '.join(circles)}</code>")
 
     if addresses:
-        lines.append(f"🏠 <b>ADDRESS:</b>\n┗━━» <i>{', '.join(addresses)}</i>")
+        # Address ko list format mein dikhana kyunki ye bade hote hain
+        lines.append("\n🏠 <b>ADDRESS(ES):</b>")
+        for addr in addresses:
+            lines.append(f"┗» <i>{addr}</i>")
 
-    # Yahan saare numbers ek saath aayenge
-    lines.append("\n📱 <b>ALL NUMBERS (Tap to Copy):</b>")
-    for num in sorted(all_numbers):
-        # <code> tag se Telegram click-to-copy enable kar deta hai
+    # Saare numbers ek hi header ke niche "Tap to Copy" mode mein
+    lines.append("\n📱 <b>ALL LINKED NUMBERS (Tap to Copy):</b>")
+    # Search number ko chhod kar baki numbers ko sort karke dikhana
+    sorted_numbers = sorted(list(all_numbers))
+    for num in sorted_numbers:
         lines.append(f"┗━━» <code>{num}</code>")
     
     lines.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯")
@@ -102,18 +95,18 @@ def format_unified_response(data_list, search_num):
 
 # --- BOT HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_html("<b>👋 Swagat Hai!</b>\n\nNumber bhejein, saare linked numbers aur Aadhaar details ek saath milenge.")
+    await update.message.reply_html("<b>👋 Swagat Hai!</b>\n\nNumber bhejein, main saare records merge karke ek hi list bana dunga.")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     number = update.message.text.strip().replace(" ", "").replace("+91", "")
     if not number.isdigit() or len(number) < 10:
-        await update.message.reply_html("<b>⚠️ Kripya valid number bhejien.</b>")
+        await update.message.reply_html("<b>⚠️ Kripya 10-digit number bhejien.</b>")
         return
 
-    wait = await update.message.reply_html("<b>⚡ Fetching All Linked Data...</b>")
+    wait = await update.message.reply_html("<b>⚡ Fetching & Merging Records...</b>")
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{API_URL}{number}", timeout=20) as response:
+            async with session.get(f"{API_URL}{number}", timeout=15) as response:
                 if response.status == 200:
                     json_res = await response.json()
                     records = json_res.get("data", [])
@@ -122,12 +115,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await wait.edit_text("<b>❌ No Record Found.</b>")
                         return
 
-                    final_output = format_unified_response(records, number)
-                    await wait.edit_text(final_output, parse_mode='HTML')
+                    # Yahan hum saare 4 records ko format_unified_response mein bhej rahe hain
+                    final_msg = format_unified_response(records, number)
+                    await wait.edit_text(final_msg, parse_mode='HTML')
                 else:
-                    await wait.edit_text(f"<b>❌ API ERROR:</b> {response.status}")
+                    await wait.edit_text(f"<b>❌ API Server Error:</b> {response.status}")
     except Exception:
-        await wait.edit_text("<b>❌ Error:</b> Connection fail ho gaya.")
+        await wait.edit_text("<b>❌ ERROR:</b> Data merge nahi ho pa raha.")
 
 def main():
     keep_alive()
