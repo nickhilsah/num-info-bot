@@ -1,114 +1,104 @@
-import os
 import logging
-import aiohttp
-from flask import Flask
-from threading import Thread
+import requests
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.constants import ParseMode
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
-# --- WEB SERVER (Hosting) ---
-app = Flask('')
-@app.route('/')
-def home(): return "FINAL BOT ONLINE ✅"
+# Logging setup
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-def run(): app.run(host='0.0.0.0', port=8080)
-def keep_alive():
-    t = Thread(target=run)
-    t.daemon = True
-    t.start()
-
-# --- CONFIGURATION ---
-BOT_TOKEN = "8651545654:AAGGuLV625bR3NuQh_ixgfrKM3FtFCZPPPQ"
-API_URL = "http://nv6.ek4nsh.in/api/proxy?num="
-
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
-
-# --- FORMATTER (Exact Match for your JSON) ---
-def format_premium_response(data_list, search_num):
-    if not data_list:
-        return ["<b>❌ NO RECORD FOUND</b>"]
-
-    # Nayi API ke hisaab se mapping (CAPITAL aur small keys ka dhyan rakha hai)
-    mapping = {
-        'NAME': '👤 <b>NAME</b>',
-        'fname': '👨‍👦 <b>FATHER</b>',
-        'MOBILE': '📱 <b>MOBILE</b>',
-        'ADDRESS': '🏠 <b>ADDRESS</b>',
-        'circle': '🌍 <b>CIRCLE</b>',
-        'alt': '📞 <b>ALT NO</b>',
-        'id': '🆔 <b>AADHAAR/ID</b>',
-        'email': '📧 <b>EMAIL</b>'
-    }
-
-    formatted_messages = []
-    
-    for i, info in enumerate(data_list[:5], 1): # Top 5 results
-        lines = []
-        lines.append(f"<b>💎 RECORD #{i}</b>")
-        lines.append(f"<b>🎯 TARGET :</b> <code>{search_num}</code>")
-        lines.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n")
-        
-        found_any = False
-        for key, label in mapping.items():
-            value = info.get(key)
-            
-            # Cleaning and Formatting
-            if value and str(value).strip() and str(value).lower() not in ["null", "none", "n/a", ""]:
-                # Address se "!" hata kar space lagane ke liye
-                val_str = str(value).replace("!", " ").strip().upper()
-                lines.append(f"{label}\n┗━━» <code>{val_str}</code>\n")
-                found_any = True
-        
-        if found_any:
-            lines.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯")
-            formatted_messages.append("\n".join(lines))
-
-    return formatted_messages
-
-# --- BOT HANDLERS ---
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    number = update.message.text.strip().replace(" ", "").replace("+91", "")
-    
-    if not number.isdigit() or len(number) < 10:
-        await update.message.reply_html("<b>⚠️ 10-digit number bhejein.</b>")
-        return
-
-    wait = await update.message.reply_html("<b>⚡ Searching New Database...</b>")
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{API_URL}{number}", timeout=25) as response:
-                if response.status == 200:
-                    json_res = await response.json()
-                    
-                    # Yahan Galti thi: Nayi API 'results' key use karti hai
-                    records = json_res.get("results", [])
-                    
-                    if not records:
-                        await wait.edit_text("<b>❌ No records found.</b>")
-                        return
-
-                    results = format_premium_response(records, number)
-                    await wait.edit_text(results[0], parse_mode='HTML')
-                    
-                    for extra_msg in results[1:]:
-                        await update.message.reply_html(extra_msg)
-                else:
-                    await wait.edit_text(f"<b>❌ API ERROR:</b> Status {response.status}")
-    except Exception as e:
-        await wait.edit_text(f"<b>❌ ERROR:</b> API Offline hai.")
+TOKEN = "8651545654:AAGGuLV625bR3NuQh_ixgfrKM3FtFCZPPPQ"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_html("<b>👋 Swagat Hai!</b>\n\nNumber bhejein (Tap-to-Copy enabled).")
+    await update.message.reply_text("Mobile number bhejiye details nikalne ke liye.")
 
-def main():
-    keep_alive()
-    app_bot = Application.builder().token(BOT_TOKEN).build()
-    app_bot.add_handler(CommandHandler("start", start))
-    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("Bot is LIVE with Nv6 API!")
-    app_bot.run_polling()
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    num = update.message.text.strip()
+    
+    if not num.isdigit() or len(num) < 10:
+        await update.message.reply_text("Valid 10-digit mobile number bhejiye.")
+        return
+
+    wait_msg = await update.message.reply_text("Searching details... 🔍")
+    
+    api_url = f"http://nv6.ek4nsh.in/api/proxy?num={num}"
+    
+    try:
+        response = requests.get(api_url)
+        data = response.json()
+        results = data.get("results", [])
+
+        if not results:
+            await wait_msg.edit_text("Koi details nahi mili.")
+            return
+
+        # Data Mapping & Merging Logic
+        unique_users = {}
+
+        for item in results:
+            # Name aur Father Name ko key banakar duplicates handle karenge
+            name = str(item.get("NAME", "N/A")).strip().upper()
+            fname = str(item.get("fname", "N/A")).strip().upper()
+            user_key = f"{name}_{fname}"
+
+            alt_num = item.get("alt")
+            alt_list = [alt_num] if alt_num and alt_num.strip() else []
+
+            if user_key not in unique_users:
+                unique_users[user_key] = {
+                    "name": name,
+                    "father": fname,
+                    "address": str(item.get("ADDRESS", "N/A")).replace("!", " "),
+                    "circle": item.get("circle", "N/A"),
+                    "mobile": item.get("MOBILE", "N/A"),
+                    "id": item.get("id", "N/A"),
+                    "email": item.get("email", "N/A"),
+                    "alternates": set(alt_list)
+                }
+            else:
+                # Agar user pehle se hai toh sirf naya alternate number add karo
+                if alt_list:
+                    unique_users[user_key]["alternates"].update(alt_list)
+
+        # Message Formatting
+        final_response = f"🔍 **Results for:** `{num}`\n\n"
+        
+        for key, user in unique_users.items():
+            alts = ", ".join([f"`{a}`" for a in user["alternates"]]) if user["alternates"] else "N/A"
+            
+            user_msg = (
+                f"👤 **Name:** `{user['name']}`\n"
+                f"👨 **Father:** `{user['father']}`\n"
+                f"📍 **Address:** `{user['address']}`\n"
+                f"📡 **Circle:** `{user['circle']}`\n"
+                f"📱 **Mobile:** `{user['mobile']}`\n"
+                f"🆔 **ID/Aadhar:** `{user['id']}`\n"
+                f"📧 **Email:** `{user['email']}`\n"
+                f"🔢 **Alt Nos:** {alts}\n"
+                f"────────────────────\n"
+            )
+            # Telegram ki limit 4096 characters hai, check karein
+            if len(final_response) + len(user_msg) > 4000:
+                await update.message.reply_text(final_response, parse_mode=ParseMode.MARKDOWN)
+                final_response = user_msg
+            else:
+                final_response += user_msg
+
+        await wait_msg.delete()
+        await update.message.reply_text(final_response, parse_mode=ParseMode.MARKDOWN)
+
+    except Exception as e:
+        logging.error(e)
+        await wait_msg.edit_text("API connection error ya data processing me issue hai.")
 
 if __name__ == '__main__':
-    main()
-                
+    application = ApplicationBuilder().token(TOKEN).build()
+    
+    start_handler = CommandHandler('start', start)
+    msg_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message)
+    
+    application.add_handler(start_handler)
+    application.add_handler(msg_handler)
+    
+    application.run_polling()
+    
