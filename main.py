@@ -6,10 +6,10 @@ from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# --- WEB SERVER (For 24/7 Hosting) ---
+# --- WEB SERVER (Hosting ke liye) ---
 app = Flask('')
 @app.route('/')
-def home(): return "PREMIUM MULTI-BOT ONLINE ✅"
+def home(): return "API BOT IS ALIVE ✅"
 
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive():
@@ -17,19 +17,18 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# --- CONFIG ---
-# @BotFather se naya token lekar yahan replace karein
+# --- CONFIGURATION ---
+# @BotFather se naya token le kar yahan daalein (Zaroori hai!)
 BOT_TOKEN = "8651545654:AAGGuLV625bR3NuQh_ixgfrKM3FtFCZPPPQ"
-API_URL = "https://nv6.ek4nsh.in/api/lookup?term="
+API_URL = "http://nv6.ek4nsh.in/api/proxy?num="
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# --- PREMIUM FORMATTER WITH TAP-TO-COPY ---
+# --- FORMATTER (Tap-to-Copy aur Multi-Record) ---
 def format_premium_response(data_list, search_num):
     if not data_list or not isinstance(data_list, list):
         return ["<b>❌ NO RECORD FOUND</b>"]
 
-    # Mapping based on your API JSON structure
     mapping = {
         'name': '👤 <b>NAME</b>',
         'fatherName': '👨‍👦 <b>FATHER</b>',
@@ -43,7 +42,7 @@ def format_premium_response(data_list, search_num):
 
     formatted_messages = []
     
-    # Process up to 5 records to keep it clean and avoid spam
+    # Max top 5 records dikhayega taaki spam na ho
     for i, info in enumerate(data_list[:5], 1):
         lines = []
         lines.append(f"<b>💎 RECORD #{i}</b>")
@@ -53,10 +52,9 @@ def format_premium_response(data_list, search_num):
         found_data = False
         for key, label in mapping.items():
             value = info.get(key)
-            # Skip empty or useless data
             if value and str(value).strip() and str(value).lower() not in ["n/a", "null", "undefined", ""]:
                 val_str = str(value).upper()
-                # <code> tag enables Tap-to-Copy
+                # <code> tag se 'Tap to Copy' enable hota hai
                 lines.append(f"{label}\n┗━━» <code>{val_str}</code>\n")
                 found_data = True
         
@@ -71,25 +69,24 @@ def format_premium_response(data_list, search_num):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(
         "<b>👋 Swagat Hai!</b>\n\n"
-        "10-digit number bhejein, saare records (Tap-to-Copy) ke saath milenge."
+        "Sirf 10-digit number bhejein, saari details milengi.\n"
+        "<i>Note: Click on details to copy!</i>"
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Cleaning the input number
     number = update.message.text.strip().replace(" ", "").replace("+91", "")
     
     if not number.isdigit() or len(number) < 10:
         await update.message.reply_html("<b>⚠️ INVALID:</b> Sahi 10-digit number bhejein.")
         return
 
-    wait = await update.message.reply_html("<b>⚡ Searching Premium Database...</b>")
+    wait = await update.message.reply_html("<b>⚡ Searching New Database...</b>")
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{API_URL}{number}", timeout=25) as response:
                 if response.status == 200:
                     json_res = await response.json()
-                    # Extracting the list from "data" key
                     records = json_res.get("data", [])
                     
                     if not records:
@@ -98,31 +95,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     results = format_premium_response(records, number)
                     
-                    # Edit the first 'searching' message with the first result
+                    # Pehla record edit karke dikhayega
                     await wait.edit_text(results[0], parse_mode='HTML')
                     
-                    # Send additional records as new messages
+                    # Baki records naye messages mein
                     for extra_msg in results[1:]:
                         await update.message.reply_html(extra_msg)
                 else:
-                    await wait.edit_text(f"<b>❌ API ERROR:</b> Status Code {response.status}")
+                    await wait.edit_text(f"<b>❌ API ERROR:</b> Status {response.status}")
     
     except Exception as e:
         logging.error(f"Error: {e}")
-        await wait.edit_text("<b>❌ ERROR:</b> API response nahi de rahi ya slow hai.")
+        await wait.edit_text("<b>❌ ERROR:</b> API slow hai ya offline hai.")
 
 def main():
-    # Keep the web server alive for Replit/UptimeRobot
-    keep_alive()
-    
-    # Initialize the Bot
+    keep_alive() # Flask server start
     app_bot = Application.builder().token(BOT_TOKEN).build()
     
-    # Add Handlers
     app_bot.add_handler(CommandHandler("start", start))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("Bot is LIVE! Multi-result and Tap-to-copy enabled.")
+    print("Bot is LIVE! Copy the Replit URL for Cron-job.org")
     app_bot.run_polling()
 
 if __name__ == '__main__':
