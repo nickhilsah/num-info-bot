@@ -10,16 +10,16 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 TOKEN = "8651545654:AAGGuLV625bR3NuQh_ixgfrKM3FtFCZPPPQ"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📱 Mobile number bhejiye, main saare records merge karke ek sath dikha dunga.")
+    await update.message.reply_text("Mobile number bhejiye details nikalne ke liye.")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     num = update.message.text.strip()
     
     if not num.isdigit() or len(num) < 10:
-        await update.message.reply_text("❌ Galat number! Kripya 10-digit mobile number bhejiye.")
+        await update.message.reply_text("Valid 10-digit mobile number bhejiye.")
         return
 
-    wait_msg = await update.message.reply_text("Searching and Merging Records... ⏳")
+    wait_msg = await update.message.reply_text("Searching details... 🔍")
     
     api_url = f"http://nv6.ek4nsh.in/api/proxy?num={num}"
     
@@ -29,86 +29,76 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         results = data.get("results", [])
 
         if not results:
-            await wait_msg.edit_text("info: Koi data nahi mila.")
+            await wait_msg.edit_text("Koi details nahi mili.")
             return
 
-        # --- Merging & Filtering Logic ---
-        merged_data = {}
+        # Data Mapping & Merging Logic
+        unique_users = {}
 
         for item in results:
-            # Cleaning names for better matching
-            raw_name = str(item.get("NAME", "UNKNOWN")).strip().upper()
-            raw_fname = str(item.get("fname", "UNKNOWN")).strip().upper()
-            
-            # Unique key based on Name + Father Name
-            user_id = f"{raw_name}|{raw_fname}"
+            # Name aur Father Name ko key banakar duplicates handle karenge
+            name = str(item.get("NAME", "N/A")).strip().upper()
+            fname = str(item.get("fname", "N/A")).strip().upper()
+            user_key = f"{name}_{fname}"
 
-            # Aadhaar Masking for Privacy (as per safety guidelines)
-            aadhar_val = item.get("id")
-            aadhar_display = f"`[Aadhaar Redacted]`" if aadhar_val and str(aadhar_val).strip() != "None" else "`None`"
+            alt_num = item.get("alt")
+            alt_list = [alt_num] if alt_num and alt_num.strip() else []
 
-            # Formatting Address
-            addr = str(item.get("ADDRESS", "N/A")).replace("!", " ").strip()
-            
-            # Collecting Numbers
-            primary_mob = str(item.get("MOBILE", "")).strip()
-            alt_val = str(item.get("alt", "")).strip()
-            
-            # If user not in dictionary, add them
-            if user_id not in merged_data:
-                merged_data[user_id] = {
-                    "name": raw_name,
-                    "fname": raw_fname,
-                    "address": addr,
+            if user_key not in unique_users:
+                unique_users[user_key] = {
+                    "name": name,
+                    "father": fname,
+                    "address": str(item.get("ADDRESS", "N/A")).replace("!", " "),
                     "circle": item.get("circle", "N/A"),
-                    "email": item.get("email", "None"),
-                    "aadhar": aadhar_display,
-                    "numbers": {primary_mob} # Set for unique numbers
+                    "mobile": item.get("MOBILE", "N/A"),
+                    "id": item.get("id", "N/A"),
+                    "email": item.get("email", "N/A"),
+                    "alternates": set(alt_list)
                 }
-                if alt_val and alt_val.lower() != "none" and not alt_val.isalpha():
-                    merged_data[user_id]["numbers"].add(alt_val)
             else:
-                # If user exists, just update their numbers set
-                merged_data[user_id]["numbers"].add(primary_mob)
-                if alt_val and alt_val.lower() != "none" and not alt_val.isalpha():
-                    merged_data[user_id]["numbers"].add(alt_val)
+                # Agar user pehle se hai toh sirf naya alternate number add karo
+                if alt_list:
+                    unique_users[user_key]["alternates"].update(alt_list)
 
-        # --- Final Message Construction ---
-        final_text = f"📑 **Consolidated Records for:** `{num}`\n"
-        final_text += "────────────────────\n"
-
-        for uid, info in merged_data.items():
-            # Join all unique numbers found for this person
-            all_nums = ", ".join([f"`{n}`" for n in info["numbers"] if n])
+        # Message Formatting
+        final_response = f"🔍 **Results for:** `{num}`\n\n"
+        
+        for key, user in unique_users.items():
+            alts = ", ".join([f"`{a}`" for a in user["alternates"]]) if user["alternates"] else "N/A"
             
-            record_block = (
-                f"👤 **Name:** `{info['name']}`\n"
-                f"👨 **Father:** `{info['fname']}`\n"
-                f"📍 **Address:** `{info['address']}`\n"
-                f"📡 **Circle:** `{info['circle']}`\n"
-                f"🆔 **Aadhar:** {info['aadhar']}\n"
-                f"📧 **Email:** `{info['email']}`\n"
-                f"📱 **All Linked Nos:** {all_nums}\n"
+            user_msg = (
+                f"👤 **Name:** `{user['name']}`\n"
+                f"👨 **Father:** `{user['father']}`\n"
+                f"📍 **Address:** `{user['address']}`\n"
+                f"📡 **Circle:** `{user['circle']}`\n"
+                f"📱 **Mobile:** `{user['mobile']}`\n"
+                f"🆔 **ID/Aadhar:** `{user['id']}`\n"
+                f"📧 **Email:** `{user['email']}`\n"
+                f"🔢 **Alt Nos:** {alts}\n"
                 f"────────────────────\n"
             )
-            
-            # Telegram message limit check
-            if len(final_text) + len(record_block) > 4000:
-                await update.message.reply_text(final_text, parse_mode=ParseMode.MARKDOWN)
-                final_text = record_block
+            # Telegram ki limit 4096 characters hai, check karein
+            if len(final_response) + len(user_msg) > 4000:
+                await update.message.reply_text(final_response, parse_mode=ParseMode.MARKDOWN)
+                final_response = user_msg
             else:
-                final_text += record_block
+                final_response += user_msg
 
         await wait_msg.delete()
-        await update.message.reply_text(final_text, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(final_response, parse_mode=ParseMode.MARKDOWN)
 
     except Exception as e:
-        logging.error(f"Error: {e}")
-        await wait_msg.edit_text("⚠️ API se data nikalne me dikkat aa rahi hai.")
+        logging.error(e)
+        await wait_msg.edit_text("API connection error ya data processing me issue hai.")
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    
+    start_handler = CommandHandler('start', start)
+    msg_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message)
+    
+    application.add_handler(start_handler)
+    application.add_handler(msg_handler)
+    
     application.run_polling()
     
