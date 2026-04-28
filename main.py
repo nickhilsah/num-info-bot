@@ -11,23 +11,32 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 TOKEN = "8651545654:AAGGuLV625bR3NuQh_ixgfrKM3FtFCZPPPQ"
 
 def clean_text(text):
-    """Faltu symbols hatane aur clean text return karne ke liye"""
+    """Faltu symbols hatane ke liye helper"""
     if text is None or str(text).lower() in ['none', 'null', '', ' ']:
         return ""
-    # Address ke '!' ko space se replace karna aur trim karna
     return str(text).replace('!', ' ').strip()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 **Number Search Bot (Optimized)**\n\nBas mobile number bhejiye, main saare linked records merge karke dikha dunga.")
+    # Bot ke "What can this bot do?" section jaisa message
+    start_text = (
+        "🤖 **Welcome to Multi-Lookup Bot!**\n"
+        "🚀 **Created by Nikhil**\n\n"
+        "📞 Phone - Mobile number lookup\n"
+        "🆔 Aadhaar - Aadhaar information\n"
+        "🏦 IFSC - Bank branch details\n"
+        "🚗 Vehicle - Vehicle RC details\n\n"
+        "__Enter 10 digit number__"
+    )
+    await update.message.reply_text(start_text, parse_mode=ParseMode.MARKDOWN)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query_num = update.message.text.strip()
     
-    if not query_num.isdigit():
-        await update.message.reply_text("❌ Kripya valid digits bhejiye.")
+    if not query_num.isdigit() or len(query_num) < 10:
+        await update.message.reply_text("❌ Kripya sahi 10-digit mobile number bhejiye.")
         return
 
-    wait_msg = await update.message.reply_text("Merging data from API... ⏳")
+    wait_msg = await update.message.reply_text("Searching details... 🔍")
     api_url = f"http://nv6.ek4nsh.in/api/proxy?num={query_num}"
     
     try:
@@ -39,26 +48,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await wait_msg.edit_text("❌ Koi record nahi mila.")
             return
 
-        # Yahan data group hoga Name + Father Name ke hisab se
+        # Merging Logic (Name + Father Name ke basis par)
         merged_records = {}
 
         for item in results:
-            # API Mapping ke hisab se keys (Lowercase)
+            # Aapke naye mapping ke hisab se keys (mobile, name, fname, id, etc.)
             name = clean_text(item.get("name")).upper()
             fname = clean_text(item.get("fname")).upper()
             
-            if not name: continue # Agar name hi nahi hai toh ignore karein
+            if not name: continue
 
-            # Unique key for merging
             person_key = f"{name}|{fname}"
 
-            # Numbers processing
-            raw_mob = clean_text(item.get("mobile"))
-            raw_alt = clean_text(item.get("alt"))
-            
+            # Mobile aur Alt numbers collect karna
             current_nums = set()
-            for val in [raw_mob, raw_alt]:
-                digit_only = re.sub(r'\D', '', val)
+            for key in ["mobile", "alt"]:
+                val = clean_text(item.get(key))
+                digit_only = re.sub(r'\D', '', val) # Sirf numbers rakho
                 if len(digit_only) >= 10:
                     current_nums.add(digit_only)
 
@@ -70,12 +76,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "circle": clean_text(item.get("circle")),
                     "id": clean_text(item.get("id")),
                     "email": clean_text(item.get("email")),
-                    "linked_numbers": current_nums
+                    "linked_nums": current_nums
                 }
             else:
-                # Purane record mein naye unique numbers add karna
-                merged_records[person_key]["linked_numbers"].update(current_nums)
-                # Agar koi field pehle khali thi toh use fill karna
+                # Agar banda same hai toh naye numbers aur missing info add karo
+                merged_records[person_key]["linked_nums"].update(current_nums)
                 if not merged_records[person_key]["address"]:
                     merged_records[person_key]["address"] = clean_text(item.get("address"))
                 if not merged_records[person_key]["id"]:
@@ -83,12 +88,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if not merged_records[person_key]["email"]:
                     merged_records[person_key]["email"] = clean_text(item.get("email"))
 
-        # Final Formatting
-        final_output = f"📑 **Search Results for:** `{query_num}`\n"
+        # Message Formatting
+        final_output = f"🔍 **Results for:** `{query_num}`\n"
         final_output += "────────────────────\n"
 
         for p in merged_records.values():
-            all_nums = ", ".join([f"`{n}`" for n in p["linked_numbers"]]) if p["linked_numbers"] else "`Not Found`"
+            # Saare numbers ek sath merge hokar dikhenge
+            nums_str = ", ".join([f"`{n}`" for n in p["linked_nums"]]) if p["linked_numbers"] else "`N/A`"
             
             info_block = (
                 f"👤 **Name:** `{p['name']}`\n"
@@ -97,11 +103,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📡 **Circle:** `{p['circle'] or 'N/A'}`\n"
                 f"🆔 **ID/Aadhar:** `{p['id'] or 'N/A'}`\n"
                 f"📧 **Email:** `{p['email'] or 'N/A'}`\n"
-                f"🔢 **All Linked Nos:** {all_nums}\n"
+                f"🔢 **Alt/Linked Nos:** {nums_str}\n"
                 f"────────────────────\n"
             )
 
-            # Check if message length exceeds limit
             if len(final_output) + len(info_block) > 4000:
                 await update.message.reply_text(final_output, parse_mode=ParseMode.MARKDOWN)
                 final_output = info_block
@@ -109,5 +114,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 final_output += info_block
 
         await wait_msg.delete()
-        await update.message.reply_text(final_output, parse_mode=ParseMode.MARK
-        
+        await update.message.reply_text(final_output, parse_mode=ParseMode.MARKDOWN)
+
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        await wait_msg.edit_text("⚠️ API error ya data processing issue.")
+
+if __name__ == '__main__':
+    application = ApplicationBuilder().token(TOKEN).build()
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    application.run_polling()
+    
