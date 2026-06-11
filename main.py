@@ -37,7 +37,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     wait_msg = await update.message.reply_text("Searching details... 🔍")
-    api_url = f"http://nv6.ek4nsh.in/api/proxy?num={query_num}"
+    api_url = f"http://nv6.ek4nsh.in/api/proxy?num={query_num}&key=ekku3012"
     
     try:
         response = requests.get(api_url)
